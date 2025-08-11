@@ -31,10 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { downloadFile } from '@/lib/utils'
-import * as pdfjsLib from 'pdfjs-dist'
-
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+// PDF.js will be loaded dynamically on client side
 
 interface ConversionOptions {
   format: 'png' | 'jpeg' | 'webp'
@@ -151,6 +148,10 @@ export default function AdvancedPDFToImagesPage() {
   // Load PDF information
   const loadPDFInfo = async (file: File) => {
     try {
+      // Dynamically import PDF.js
+      const pdfjsLib = await import('pdfjs-dist')
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+
       const arrayBuffer = await file.arrayBuffer()
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
       setTotalPages(pdf.numPages)
@@ -169,6 +170,10 @@ export default function AdvancedPDFToImagesPage() {
     setExtractedPages([])
 
     try {
+      // Dynamically import PDF.js
+      const pdfjsLib = await import('pdfjs-dist')
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+
       const arrayBuffer = await pdfFile.arrayBuffer()
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
       
@@ -225,9 +230,10 @@ export default function AdvancedPDFToImagesPage() {
           // Render PDF page to canvas
           const renderContext = {
             canvasContext: context,
-            viewport: viewport
+            viewport: viewport,
+            canvas: canvas
           }
-          
+
           await page.render(renderContext).promise
           
           // Apply post-processing
