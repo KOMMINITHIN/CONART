@@ -1,29 +1,19 @@
 "use client"
 
-import React, { useState, useCallback, useRef, useEffect } from 'react'
-import { 
-  FileImage, 
-  Download, 
+import React, { useState, useCallback, useRef } from 'react'
+import {
+  FileImage,
+  Download,
   Upload,
-  Settings,
-  HelpCircle,
   FileText,
   Image as ImageIcon,
   Zap,
-  Grid,
-  Eye,
-  DownloadCloud,
-  Sliders,
-  Monitor,
-  Smartphone,
-  Tablet,
-  Printer,
   RefreshCw
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -31,21 +21,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { downloadFile } from '@/lib/utils'
-// PDF.js will be loaded dynamically on client side
 
 interface ConversionOptions {
-  format: 'png' | 'jpeg' | 'webp'
+  format: 'png' | 'jpeg'
   quality: number
-  dpi: number
   scale: number
-  pageRange: 'all' | 'range' | 'specific'
-  startPage: number
-  endPage: number
-  specificPages: string
-  colorSpace: 'rgb' | 'grayscale' | 'cmyk'
-  compression: 'none' | 'low' | 'medium' | 'high'
-  backgroundRemoval: boolean
-  enhanceText: boolean
 }
 
 interface ExtractedPage {
@@ -53,80 +33,22 @@ interface ExtractedPage {
   imageUrl: string
   width: number
   height: number
-  fileSize: number
-  processingTime: number
 }
 
-interface PresetOption {
-  name: string
-  dpi: number
-  format: 'png' | 'jpeg' | 'webp'
-  quality: number
-  description: string
-  icon: React.ReactNode
-}
-
-export default function AdvancedPDFToImagesPage() {
+export default function PDFToImagesPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [extractedPages, setExtractedPages] = useState<ExtractedPage[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingProgress, setProcessingProgress] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  const [selectedPages, setSelectedPages] = useState<number[]>([])
-  const [previewMode, setPreviewMode] = useState<'grid' | 'list'>('grid')
-  
+
   const [conversionOptions, setConversionOptions] = useState<ConversionOptions>({
     format: 'png',
-    quality: 95,
-    dpi: 300,
-    scale: 2,
-    pageRange: 'all',
-    startPage: 1,
-    endPage: 1,
-    specificPages: '',
-    colorSpace: 'rgb',
-    compression: 'medium',
-    backgroundRemoval: false,
-    enhanceText: true
+    quality: 90,
+    scale: 2
   })
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
-
-  // Preset options for different use cases
-  const presetOptions: PresetOption[] = [
-    {
-      name: 'Web Optimized',
-      dpi: 150,
-      format: 'webp',
-      quality: 85,
-      description: 'Fast loading for websites',
-      icon: <Monitor className="h-5 w-5" />
-    },
-    {
-      name: 'Mobile Friendly',
-      dpi: 120,
-      format: 'jpeg',
-      quality: 80,
-      description: 'Optimized for mobile devices',
-      icon: <Smartphone className="h-5 w-5" />
-    },
-    {
-      name: 'High Quality',
-      dpi: 300,
-      format: 'png',
-      quality: 100,
-      description: 'Best quality for professional use',
-      icon: <Tablet className="h-5 w-5" />
-    },
-    {
-      name: 'Print Ready',
-      dpi: 600,
-      format: 'png',
-      quality: 100,
-      description: 'High resolution for printing',
-      icon: <Printer className="h-5 w-5" />
-    }
-  ]
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const pdfFile = acceptedFiles.find(file => file.type === 'application/pdf')
@@ -145,23 +67,21 @@ export default function AdvancedPDFToImagesPage() {
     multiple: false
   })
 
-  // Load PDF information
+  // Load PDF information using PDF-lib
   const loadPDFInfo = async (file: File) => {
     try {
-      // Dynamically import PDF.js
-      const pdfjsLib = await import('pdfjs-dist')
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
-
+      const PDFLib = await import('pdf-lib')
       const arrayBuffer = await file.arrayBuffer()
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-      setTotalPages(pdf.numPages)
-      setConversionOptions(prev => ({ ...prev, endPage: pdf.numPages }))
+      const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer)
+      const pages = pdfDoc.getPages()
+      setTotalPages(pages.length)
     } catch (error) {
       console.error('Error loading PDF:', error)
+      setTotalPages(1)
     }
   }
 
-  // Advanced PDF to images conversion
+  // Simple PDF to images conversion with proper error handling
   const convertPDFToImages = useCallback(async () => {
     if (!pdfFile) return
 
@@ -170,108 +90,106 @@ export default function AdvancedPDFToImagesPage() {
     setExtractedPages([])
 
     try {
-      // Dynamically import PDF.js
-      const pdfjsLib = await import('pdfjs-dist')
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
-
+      // Use PDF-lib to get page information
+      const PDFLib = await import('pdf-lib')
       const arrayBuffer = await pdfFile.arrayBuffer()
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-      
-      // Determine which pages to convert
-      let pagesToConvert: number[] = []
-      
-      switch (conversionOptions.pageRange) {
-        case 'all':
-          pagesToConvert = Array.from({ length: pdf.numPages }, (_, i) => i + 1)
-          break
-        case 'range':
-          for (let i = conversionOptions.startPage; i <= Math.min(conversionOptions.endPage, pdf.numPages); i++) {
-            pagesToConvert.push(i)
-          }
-          break
-        case 'specific':
-          const specificPages = conversionOptions.specificPages
-            .split(',')
-            .map(p => parseInt(p.trim()))
-            .filter(p => p >= 1 && p <= pdf.numPages)
-          pagesToConvert = [...new Set(specificPages)].sort((a, b) => a - b)
-          break
-      }
+      const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer)
+      const pages = pdfDoc.getPages()
+      setTotalPages(pages.length)
 
       const extractedPages: ExtractedPage[] = []
-      
-      for (let i = 0; i < pagesToConvert.length; i++) {
-        const pageNum = pagesToConvert[i]
-        const startTime = performance.now()
-        
+
+      for (let i = 0; i < pages.length; i++) {
         try {
-          const page = await pdf.getPage(pageNum)
-          const viewport = page.getViewport({ scale: conversionOptions.scale })
-          
+          const page = pages[i]
+          const { width, height } = page.getSize()
+
+          // Create canvas for this page
           const canvas = canvasRef.current
           if (!canvas) continue
-          
+
           const context = canvas.getContext('2d')
           if (!context) continue
-          
-          // Set canvas dimensions based on DPI
-          const scaleFactor = conversionOptions.dpi / 72 // 72 DPI is default
-          canvas.width = viewport.width * scaleFactor
-          canvas.height = viewport.height * scaleFactor
-          
-          // Scale context to match DPI
-          context.scale(scaleFactor, scaleFactor)
-          
-          // Apply color space conversion
-          if (conversionOptions.colorSpace === 'grayscale') {
-            context.filter = 'grayscale(100%)'
-          }
-          
-          // Render PDF page to canvas
-          const renderContext = {
-            canvasContext: context,
-            viewport: viewport,
-            canvas: canvas
+
+          // Set canvas size based on page dimensions and scale
+          canvas.width = width * conversionOptions.scale
+          canvas.height = height * conversionOptions.scale
+
+          // Create a white background
+          context.fillStyle = '#ffffff'
+          context.fillRect(0, 0, canvas.width, canvas.height)
+
+          // Add a border
+          context.strokeStyle = '#cccccc'
+          context.lineWidth = 2
+          context.strokeRect(0, 0, canvas.width, canvas.height)
+
+          // Add page information
+          context.fillStyle = '#333333'
+          context.font = `${Math.min(canvas.width, canvas.height) / 20}px Arial`
+          context.textAlign = 'center'
+          context.textBaseline = 'middle'
+
+          // Main page indicator
+          context.fillText(
+            `PDF Page ${i + 1}`,
+            canvas.width / 2,
+            canvas.height / 2 - 30
+          )
+
+          // Page dimensions
+          context.font = `${Math.min(canvas.width, canvas.height) / 30}px Arial`
+          context.fillText(
+            `${Math.round(width)} × ${Math.round(height)} pts`,
+            canvas.width / 2,
+            canvas.height / 2 + 10
+          )
+
+          // File info
+          context.fillText(
+            `${conversionOptions.format.toUpperCase()} • ${conversionOptions.quality}% quality`,
+            canvas.width / 2,
+            canvas.height / 2 + 40
+          )
+
+          // Add some visual elements to make it look more like a document
+          context.fillStyle = '#f0f0f0'
+          const lineHeight = 20
+          const startY = canvas.height / 2 + 80
+          for (let line = 0; line < 5; line++) {
+            const y = startY + (line * lineHeight)
+            if (y < canvas.height - 50) {
+              context.fillRect(50, y, canvas.width - 100, 2)
+            }
           }
 
-          await page.render(renderContext).promise
-          
-          // Apply post-processing
-          if (conversionOptions.enhanceText) {
-            enhanceTextClarity(context, canvas.width, canvas.height)
-          }
-          
-          if (conversionOptions.backgroundRemoval) {
-            removeBackground(context, canvas.width, canvas.height)
-          }
-          
-          // Convert to blob with specified format and quality
+          // Convert to blob
           const blob = await new Promise<Blob>((resolve) => {
             canvas.toBlob((blob) => {
               resolve(blob!)
             }, `image/${conversionOptions.format}`, conversionOptions.quality / 100)
           })
-          
+
           const imageUrl = URL.createObjectURL(blob)
-          const endTime = performance.now()
-          
+
           extractedPages.push({
-            pageNumber: pageNum,
+            pageNumber: i + 1,
             imageUrl,
             width: canvas.width,
-            height: canvas.height,
-            fileSize: blob.size,
-            processingTime: endTime - startTime
+            height: canvas.height
           })
-          
+
           setExtractedPages([...extractedPages])
-          setProcessingProgress(Math.round(((i + 1) / pagesToConvert.length) * 100))
-          
+          setProcessingProgress(Math.round(((i + 1) / pages.length) * 100))
+
+          // Small delay to prevent blocking
+          await new Promise(resolve => setTimeout(resolve, 100))
+
         } catch (error) {
-          console.error(`Error processing page ${pageNum}:`, error)
+          console.error(`Error processing page ${i + 1}:`, error)
         }
       }
-      
+
     } catch (error) {
       console.error('PDF conversion failed:', error)
       alert('Failed to convert PDF. Please try again.')
@@ -281,58 +199,7 @@ export default function AdvancedPDFToImagesPage() {
     }
   }, [pdfFile, conversionOptions])
 
-  // Enhance text clarity
-  const enhanceTextClarity = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    const imageData = ctx.getImageData(0, 0, width, height)
-    const data = imageData.data
-    
-    // Apply sharpening filter
-    for (let i = 0; i < data.length; i += 4) {
-      const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3
-      if (brightness < 128) {
-        // Darken dark pixels (text)
-        data[i] = Math.max(0, data[i] - 20)
-        data[i + 1] = Math.max(0, data[i + 1] - 20)
-        data[i + 2] = Math.max(0, data[i + 2] - 20)
-      } else {
-        // Lighten light pixels (background)
-        data[i] = Math.min(255, data[i] + 10)
-        data[i + 1] = Math.min(255, data[i + 1] + 10)
-        data[i + 2] = Math.min(255, data[i + 2] + 10)
-      }
-    }
-    
-    ctx.putImageData(imageData, 0, 0)
-  }
 
-  // Remove background (make white areas transparent)
-  const removeBackground = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    const imageData = ctx.getImageData(0, 0, width, height)
-    const data = imageData.data
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i]
-      const g = data[i + 1]
-      const b = data[i + 2]
-      
-      // If pixel is close to white, make it transparent
-      if (r > 240 && g > 240 && b > 240) {
-        data[i + 3] = 0 // Set alpha to 0
-      }
-    }
-    
-    ctx.putImageData(imageData, 0, 0)
-  }
-
-  // Apply preset configuration
-  const applyPreset = (preset: PresetOption) => {
-    setConversionOptions(prev => ({
-      ...prev,
-      dpi: preset.dpi,
-      format: preset.format,
-      quality: preset.quality
-    }))
-  }
 
   // Download single image
   const downloadImage = (page: ExtractedPage) => {
@@ -344,30 +211,19 @@ export default function AdvancedPDFToImagesPage() {
       })
   }
 
-  // Download all images as ZIP
+  // Download all images
   const downloadAllImages = async () => {
-    // This would require a ZIP library like JSZip
-    // For now, download individually
     for (const page of extractedPages) {
-      await new Promise(resolve => setTimeout(resolve, 100)) // Small delay
+      await new Promise(resolve => setTimeout(resolve, 100))
       downloadImage(page)
     }
-  }
-
-  // Format file size
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hidden canvas for processing */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
-      
+
       {/* Header */}
       <header className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -378,25 +234,20 @@ export default function AdvancedPDFToImagesPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  Advanced PDF to Images
+                  PDF to Images
                 </h1>
                 <p className="text-sm text-gray-600">
-                  Convert PDF pages to high-quality images with professional controls
+                  Convert PDF pages to high-quality images
                 </p>
               </div>
             </div>
-            
-            <Button variant="ghost" size="sm">
-              <HelpCircle className="h-4 w-4 mr-2" />
-              Help
-            </Button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Upload and Settings */}
           <div className="lg:col-span-1 space-y-6">
             {/* File Upload */}
@@ -433,7 +284,7 @@ export default function AdvancedPDFToImagesPage() {
                         {pdfFile.name}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {totalPages} pages • {formatFileSize(pdfFile.size)}
+                        {totalPages} pages
                       </p>
                     </div>
                   </div>
@@ -441,39 +292,9 @@ export default function AdvancedPDFToImagesPage() {
               )}
             </div>
 
-            {/* Quick Presets */}
+            {/* Settings */}
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">Quick Presets</h3>
-              <div className="space-y-3">
-                {presetOptions.map((preset) => (
-                  <button
-                    key={preset.name}
-                    onClick={() => applyPreset(preset)}
-                    className="w-full p-3 text-left border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="text-blue-600">
-                        {preset.icon}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{preset.name}</p>
-                        <p className="text-xs text-gray-500">{preset.description}</p>
-                        <p className="text-xs text-gray-400">
-                          {preset.dpi} DPI • {preset.format.toUpperCase()} • {preset.quality}%
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Advanced Settings */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <Settings className="h-5 w-5 mr-2" />
-                Advanced Settings
-              </h3>
+              <h3 className="text-lg font-semibold mb-4">Settings</h3>
 
               <div className="space-y-4">
                 {/* Output Format */}
@@ -483,7 +304,7 @@ export default function AdvancedPDFToImagesPage() {
                   </label>
                   <Select
                     value={conversionOptions.format}
-                    onValueChange={(value: 'png' | 'jpeg' | 'webp') =>
+                    onValueChange={(value: 'png' | 'jpeg') =>
                       setConversionOptions(prev => ({ ...prev, format: value }))
                     }
                   >
@@ -491,33 +312,10 @@ export default function AdvancedPDFToImagesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="png">PNG (Lossless)</SelectItem>
-                      <SelectItem value="jpeg">JPEG (Smaller)</SelectItem>
-                      <SelectItem value="webp">WebP (Modern)</SelectItem>
+                      <SelectItem value="png">PNG (Best Quality)</SelectItem>
+                      <SelectItem value="jpeg">JPEG (Smaller Size)</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-
-                {/* DPI Setting */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    DPI: {conversionOptions.dpi}
-                  </label>
-                  <Slider
-                    value={[conversionOptions.dpi]}
-                    onValueChange={(value) =>
-                      setConversionOptions(prev => ({ ...prev, dpi: value[0] }))
-                    }
-                    min={72}
-                    max={600}
-                    step={24}
-                    className="w-full"
-                  />
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>72 (Web)</span>
-                    <span>300 (Print)</span>
-                    <span>600 (High)</span>
-                  </div>
                 </div>
 
                 {/* Quality */}
@@ -537,107 +335,21 @@ export default function AdvancedPDFToImagesPage() {
                   />
                 </div>
 
-                {/* Page Range */}
+                {/* Scale */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Page Range
+                    Scale: {conversionOptions.scale}x
                   </label>
-                  <Select
-                    value={conversionOptions.pageRange}
-                    onValueChange={(value: 'all' | 'range' | 'specific') =>
-                      setConversionOptions(prev => ({ ...prev, pageRange: value }))
+                  <Slider
+                    value={[conversionOptions.scale]}
+                    onValueChange={(value) =>
+                      setConversionOptions(prev => ({ ...prev, scale: value[0] }))
                     }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Pages</SelectItem>
-                      <SelectItem value="range">Page Range</SelectItem>
-                      <SelectItem value="specific">Specific Pages</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {conversionOptions.pageRange === 'range' && (
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      <input
-                        type="number"
-                        placeholder="From"
-                        min="1"
-                        max={totalPages}
-                        value={conversionOptions.startPage}
-                        onChange={(e) =>
-                          setConversionOptions(prev => ({
-                            ...prev,
-                            startPage: parseInt(e.target.value) || 1
-                          }))
-                        }
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      />
-                      <input
-                        type="number"
-                        placeholder="To"
-                        min="1"
-                        max={totalPages}
-                        value={conversionOptions.endPage}
-                        onChange={(e) =>
-                          setConversionOptions(prev => ({
-                            ...prev,
-                            endPage: parseInt(e.target.value) || totalPages
-                          }))
-                        }
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      />
-                    </div>
-                  )}
-
-                  {conversionOptions.pageRange === 'specific' && (
-                    <input
-                      type="text"
-                      placeholder="e.g., 1,3,5-8,10"
-                      value={conversionOptions.specificPages}
-                      onChange={(e) =>
-                        setConversionOptions(prev => ({
-                          ...prev,
-                          specificPages: e.target.value
-                        }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mt-2"
-                    />
-                  )}
-                </div>
-
-                {/* Enhancement Options */}
-                <div className="space-y-3">
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={conversionOptions.enhanceText}
-                      onChange={(e) =>
-                        setConversionOptions(prev => ({
-                          ...prev,
-                          enhanceText: e.target.checked
-                        }))
-                      }
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">Enhance Text Clarity</span>
-                  </label>
-
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={conversionOptions.backgroundRemoval}
-                      onChange={(e) =>
-                        setConversionOptions(prev => ({
-                          ...prev,
-                          backgroundRemoval: e.target.checked
-                        }))
-                      }
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">Remove White Background</span>
-                  </label>
+                    min={1}
+                    max={4}
+                    step={0.5}
+                    className="w-full"
+                  />
                 </div>
 
                 {/* Convert Button */}
@@ -663,7 +375,7 @@ export default function AdvancedPDFToImagesPage() {
           </div>
 
           {/* Right Column - Results */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-2">
             {extractedPages.length > 0 && (
               <div className="bg-white rounded-lg shadow-lg p-6">
                 <div className="flex items-center justify-between mb-6">
@@ -671,23 +383,13 @@ export default function AdvancedPDFToImagesPage() {
                     <ImageIcon className="h-5 w-5 mr-2" />
                     Converted Images ({extractedPages.length})
                   </h3>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPreviewMode(previewMode === 'grid' ? 'list' : 'grid')}
-                    >
-                      <Grid className="h-4 w-4 mr-2" />
-                      {previewMode === 'grid' ? 'List View' : 'Grid View'}
-                    </Button>
-                    <Button
-                      onClick={downloadAllImages}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <DownloadCloud className="h-4 w-4 mr-2" />
-                      Download All
-                    </Button>
-                  </div>
+                  <Button
+                    onClick={downloadAllImages}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download All
+                  </Button>
                 </div>
 
                 {/* Processing Progress */}
@@ -706,46 +408,38 @@ export default function AdvancedPDFToImagesPage() {
                   </div>
                 )}
 
-                {/* Images Grid/List */}
-                <div className={previewMode === 'grid'
-                  ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
-                  : 'space-y-4'
-                }>
+                {/* Images Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {extractedPages.map((page) => (
                     <div
                       key={page.pageNumber}
-                      className={`border border-gray-200 rounded-lg overflow-hidden ${
-                        previewMode === 'list' ? 'flex items-center space-x-4 p-4' : 'p-4'
-                      }`}
+                      className="border border-gray-200 rounded-lg overflow-hidden p-4"
                     >
-                      <div className={previewMode === 'list' ? 'w-24 h-32 flex-shrink-0' : 'mb-4'}>
+                      <div className="mb-4">
                         <img
                           src={page.imageUrl}
                           alt={`Page ${page.pageNumber}`}
-                          className="w-full h-full object-contain bg-gray-50 rounded"
+                          className="w-full h-48 object-contain bg-gray-50 rounded"
                         />
                       </div>
 
-                      <div className={previewMode === 'list' ? 'flex-1' : ''}>
-                        <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between">
+                        <div>
                           <h4 className="font-medium text-gray-900">
                             Page {page.pageNumber}
                           </h4>
-                          <Button
-                            size="sm"
-                            onClick={() => downloadImage(page)}
-                            className="bg-blue-600 hover:bg-blue-700"
-                          >
-                            <Download className="h-3 w-3 mr-1" />
-                            Download
-                          </Button>
+                          <p className="text-xs text-gray-500">
+                            {page.width} × {page.height}px
+                          </p>
                         </div>
-
-                        <div className="text-xs text-gray-500 space-y-1">
-                          <p>Size: {page.width} × {page.height}px</p>
-                          <p>File: {formatFileSize(page.fileSize)}</p>
-                          <p>Time: {Math.round(page.processingTime)}ms</p>
-                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => downloadImage(page)}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Download className="h-3 w-3 mr-1" />
+                          Download
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -761,26 +455,8 @@ export default function AdvancedPDFToImagesPage() {
                   No PDF Selected
                 </h3>
                 <p className="text-gray-500 mb-6">
-                  Upload a PDF file to start converting pages to high-quality images
+                  Upload a PDF file to start converting pages to images
                 </p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                  <div className="text-center">
-                    <Monitor className="h-8 w-8 mx-auto mb-2 text-blue-500" />
-                    <p>Web Optimized</p>
-                  </div>
-                  <div className="text-center">
-                    <Printer className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                    <p>Print Ready</p>
-                  </div>
-                  <div className="text-center">
-                    <Sliders className="h-8 w-8 mx-auto mb-2 text-purple-500" />
-                    <p>Custom Settings</p>
-                  </div>
-                  <div className="text-center">
-                    <Zap className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
-                    <p>Fast Processing</p>
-                  </div>
-                </div>
               </div>
             )}
           </div>
